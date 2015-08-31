@@ -50,7 +50,7 @@ LIBHB.c.o      += $(LIBHB.arch.c.o)
 ## activate namespace patterns based on ARCH.dirs
 LIBHB.ns_patterns = $(foreach dir,$(ARCH.dirs),$(dir)/%)
 
-LIBHB/x86/%/CLANG.m = -mfpmath=sse -msse2
+LIBHB/x86/%/CLANG.m = fpmath=sse sse2
 
 ###############################################################################
 
