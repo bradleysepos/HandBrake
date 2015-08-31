@@ -39,7 +39,8 @@ CLANG.arch/type = list
 CLANG.arch/args = -arch $1
 
 CLANG.m      =
-CLANG.m/type = regular
+CLANG.m/type = list
+CLANG.m/args = -m$1
 
 CLANG.sysroot      =
 CLANG.sysroot/type = function
