@@ -1,0 +1,60 @@
+###############################################################################
+##
+## PRIVATE FUNCTIONS
+##
+###############################################################################
+
+NAMESPACE =
+
+## FUNCTION: prefix namespace
+## $1 = namespace
+## $2 = scoped variable name
+## return prefix string
+__NAMESPACE.prefix = $(if $1,$(if $(filter .,$1),,$(if $(filter %/,$1),$1,$1.)))$2
+
+## FUNCTION: flatten namespaces
+## $1 = namespaces
+## return list of namespaces
+__NAMESPACE.flatten   = $(strip $(foreach x,$(NAMESPACE),$(call __NAMESPACE.flatten.0,$x)))
+__NAMESPACE.flatten.0 = $(foreach x,$1,$1 $(if $(strip $($1.ns_search)),$(call __NAMESPACE.flatten.0,$($1.ns_search))))
+
+## FUNCTION: expand variable from all namespaces and collect
+## $1 = scoped variable name
+## return list of global variable names
+__NAMESPACE.idcollect = $(foreach x,$(call __NAMESPACE.flatten),$(call __NAMESPACE.prefix,$x,$1))
+__NAMESPACE.collect = $(strip $(foreach x,$(call __NAMESPACE.idcollect,$1),$($x)))
+
+## FUNCTION: find variable from first namespace in which it is defined
+## $1 = scoped variable name
+## return global variable name
+__NAMESPACE.idvar = $(word 1,$(foreach x,$(call __NAMESPACE.flatten),$(if $(filter-out undefined,$(flavor $(call __NAMESPACE.prefix,$x,$1))),$(call __NAMESPACE.prefix,$x,$1))))
+__NAMESPACE.var = $(strip $($(call __NAMESPACE.idvar,$1)))
+
+## command functions
+__NAMESPACE.command.regular = $(call __NAMESPACE.var,$1)
+__NAMESPACE.command.optional = $(if $(filter 1,$(call __NAMESPACE.var,$1)),$(call __NAMESPACE.var,$1/args))
+__NAMESPACE.command.function = $(if $(call __NAMESPACE.var,$1),$(call $(call __NAMESPACE.idvar,$1/args),$(call __NAMESPACE.var,$1)))
+__NAMESPACE.command.list = $(foreach x,$(call __NAMESPACE.collect,$1),$(call $(call __NAMESPACE.idvar,$1/args),$x))
+
+__NAMESPACE.command.enum = \
+    $(eval __nscetmp.index := $(word 1,$(call __NAMESPACE.var,$1))) \
+    $(if $(__nscetmp.index), \
+        $(eval __nscetmp.value := $(call __NAMESPACE.var,$1/args.$(__nscetmp.index)))$(if $(__nscetmp.value),,$(error NAMESPACE var '$1' has invalid enum: '$(__nscetmp.index)')) \
+        $(__nscetmp.value)) \
+        $(eval __nscetmp.value :=) \
+    $(eval __nscetmp.index :=)
+
+__NAMESPACE.command.rule-function = $(if $(call __NAMESPACE.var,$1),$(call $(call __NAMESPACE.idvar,$1/args),$2,$3))
+
+## $1 = spec
+## $2 = target file
+## $3 = source files
+__NAMESPACE.command = $(strip $(foreach e,$1, \
+        $(eval __nsctmp.type := $(or $(strip $(call __NAMESPACE.var,$e/type)),$(error NAMESPACE var has no type: '$e'))) \
+        $(eval __nsctmp.fn := __NAMESPACE.command.$(__nsctmp.type))$(if $(filter undefined,$(__nsctmp.fn)),$(error NAMESPACE var '$e' type command function undefined: '$(__nsctmp.fn)')) \
+        \
+        $(call $(__nsctmp.fn),$e,$2,$3) \
+        \
+        $(eval __nsctmp.fn :=) \
+        $(eval __nsctmp.type :=) \
+    ))

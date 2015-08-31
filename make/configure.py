@@ -915,9 +915,7 @@ class ToolProbe( Action ):
         self.run()
 
     def doc_add( self, doc ):
-        doc.add( self.var, self.pathname )
-
-###############################################################################
+        doc.nvpair( self.var, self.pathname )
 
 ###############################################################################
 ##
@@ -1050,7 +1048,7 @@ class SelectTool( Action ):
                 % (self.name,value,self.toString( True )) )
 
     def doc_add( self, doc ):
-        doc.add( self.var, self.selected )
+        doc.nvpair( self.var, self.selected )
 
     def toString( self, nodefault=False ):
         if len(self.pool) == 1:
@@ -1067,112 +1065,201 @@ class SelectTool( Action ):
 
 ###############################################################################
 ##
-## config object used to output gnu-make or gnu-m4 output.
+## Arch provides canonical CPU and compilation information exposed to
+## the build system and C languages.
 ##
-## - add() to add NAME/VALUE pairs suitable for both make/m4.
-## - addBlank() to add a linefeed for both make/m4.
-## - addMake() to add a make-specific line.
-## - addM4() to add a m4-specific line.
+## Note it differs from ArchAction, which provides CPU architecture naming
+## based on external, mostly platform supplied standards.
+##
+class Arch:
+    class Flag:
+        def __init__(self, name, dirs):
+            self.name = name
+            self.dirs = dirs
+
+    def __init__(self):
+        self.flags = ['canonical', None]
+        if build.match('i?86-*'):
+            self.canonical = 'x86_32'
+            self.flags.append('x86')
+            self.flags.append('bit32')
+        elif build.match('x86_64-*', 'amd64-*'):
+            self.canonical = 'x86_64'
+            self.flags.append('x86')
+            self.flags.append('bit64')
+        else:
+            ## fallback, for unknown machines
+            self.canonical = build.machine
+            self.flags[0] = 'noncanonical'
+        self.flags[1] = self.canonical
+
+    def add_doc(self, doc):
+        doc.blank()
+        doc.nvpair('ARCH.canonical', self.canonical)
+        doc.nvpair('ARCH.canonical.def', self.canonical.upper())
+        doc.nvpair('ARCH.dirs', ' '.join(self.flags[1:]))
+        doc.nvpair('ARCH.flags', ' '.join(self.flags))
+        doc.nvpair('ARCH.flags.def', ' '.join(self.flags).upper())
+        for flag in self.flags:
+            doc.flag('ARCH.flag.%s' % (flag))
+
+###############################################################################
+##
+## Config document creator.
+##
+## GNU make top-level build file, and GNU m4 project values are produced.
 ##
 class ConfigDocument:
-    def __init__( self ):
-        self._elements = []
+    class File(list):
+        class Raw:
+            def __init__(self, line):
+                self.line = line
 
-    def _outputMake( self, file, namelen, name, value, append ):
-        if append:
-            if value == None or len(str(value)) == 0:
-                file.write( '%-*s +=\n' % (namelen, name) )
-            else:
-                file.write( '%-*s += %s\n' % (namelen, name, value) )
-        else:
-            if value == None or len(str(value)) == 0:
-                file.write( '%-*s  =\n' % (namelen, name) )
-            else:
-                file.write( '%-*s  = %s\n' % (namelen, name, value) )
+            def emit(self, file):
+                return '%s\n' % (self.line)
 
-    def _outputM4( self, file, namelen, name, value ):
-        namelen += 7
-        name = '<<__%s>>,' % name.replace( '.', '_' )
-        file.write( 'define(%-*s  <<%s>>)dnl\n' % (namelen, name, value ))
+        def __init__(self):
+            self.namelen = 0
 
-    def add( self, name, value, append=False ):
-        self._elements.append( [name,value,append] )
-
-    def addBlank( self ):
-        self._elements.append( None )
-
-    def addComment( self, format, *args ):
-        self.addMake( '## ' + format % args )
-        self.addM4( 'dnl ' + format % args )
-
-    def addMake( self, line ):
-        self._elements.append( ('?make',line) )
-
-    def addM4( self, line ):
-        self._elements.append( ('?m4',line) )
-
-    def output( self, file, type ):
-        namelen = 0
-        for item in self._elements:
-            if item == None or item[0].find( '?' ) == 0:
-                continue
-            if len(item[0]) > namelen:
-                namelen = len(item[0])
-        for item in self._elements:
-            if item == None:
-                if type == 'm4':
-                    file.write( 'dnl\n' )
-                else:
-                    file.write( '\n' )
-                continue
-            if item[0].find( '?' ) == 0:
-                if item[0].find( type, 1 ) == 1:
-                    file.write( '%s\n' % (item[1]) )
-                continue
-
-            if type == 'm4':
-                self._outputM4( file, namelen, item[0], item[1] )
-            else:
-                self._outputMake( file, namelen, item[0], item[1], item[2] )
-
-    def update( self, name, value ):
-        for item in self._elements:
-            if item == None:
-                continue
-            if item[0] == name:
-                item[1] = value
-                return
-        raise ValueError( 'element not found: %s' % (name) )
-
-    def write( self, type ):
-        if type == 'make':
-            fname = 'GNUmakefile'
-        elif type == 'm4':
-            fname = os.path.join( 'project', project.name_lower + '.m4' )
-        else:
-            raise ValueError, 'unknown file type: ' + type
-
-        ftmp  = fname + '.tmp'
-        try:
+        def generate(self, filename):
+            ftmp = filename + '.tmp'
             try:
-                file = cfg.open( ftmp, 'w' )
-                self.output( file, type )
-            finally:
                 try:
-                    file.close()
-                except:
-                    pass
-        except Exception, x:
-            try:
-                os.remove( ftmp )
+                    file = cfg.open(ftmp, 'w')
+                    for line in self:
+                        file.write(line.emit(self))
+                finally:
+                    try:
+                        file.close()
+                    except:
+                        pass
             except Exception, x:
-                pass
-            cfg.errln( 'failed writing to %s\n%s', ftmp, x )
+                try:
+                    os.remove(ftmp)
+                except Exception, x:
+                    pass
+                cfg.errln('failed writing to %s\n%s', ftmp, x)
 
-        try:
-            os.rename( ftmp, fname )
-        except Exception, x:
-            cfg.errln( 'failed writing to %s\n%s', fname, x )
+            try:
+                os.rename( ftmp, filename )
+            except Exception, x:
+                cfg.errln('failed writing to %s\n%s', filename, x)
+
+    class Noop(File):
+        pass
+
+    class Make(File):
+        class Blank:
+            def emit(self, make):
+                return '\n'
+
+        class Comment:
+            def __init__(self, text):
+                self.text = text
+
+            def emit(self, make):
+                return '# %s\n' % (self.text)
+
+        class NameValue:
+            def __init__(self, name, value, append):
+                self.name = name
+                self.value = value
+                self.append = append
+
+            def emit(self, make):
+                if self.value == None or len(str(self.value)) == 0:
+                    return '%-*s %s=\n' % (make.namelen, self.name, '+' if self.append else ' ')
+                else:
+                    return '%-*s %s= %s\n' % (make.namelen, self.name, '+' if self.append else ' ', self.value)
+
+        class Flag:
+            def __init__(self, name):
+                self.name = name
+
+            def emit(self, make):
+                return '%-*s  = 1\n' % (make.namelen, self.name)
+
+    class M4(File):
+        class Blank:
+            def emit(self, m4):
+                return 'dnl\n'
+
+        class Comment:
+            def __init__(self, text):
+                self.text = text
+
+            def emit(self, m4):
+                return 'dnl %s\n' % (self.text)
+
+        class NameValue:
+            def __init__(self, name, value, append):
+                self.name = name
+                self.value = value
+                self.append = append
+
+            def emit(self, m4):
+                namelen = m4.namelen + 7
+                name = '<<__%s>>,' % (self.name.replace( '.', '_'))
+                return 'define(%-*s  <<%s>>)dnl\n' % (namelen, name, self.value)
+
+        class Flag:
+            def __init__(self, name):
+                self.name = name
+
+            def emit(self, m4):
+                namelen = m4.namelen + 7
+                name = '<<__%s>>,' % (self.name.replace( '.', '_'))
+                return 'define(%-*s  <<1>>)dnl\n' % (namelen, name)
+
+    def __init__(self):
+        self.namelen = 0
+        self.noop = self.Noop()
+        self.make = self.Make()
+        self.m4 = self.M4()
+        self.target_make = self.make
+        self.target_m4 = self.m4
+
+    def blank(self):
+        self.target_make.append(self.Make.Blank())
+        self.target_m4.append(self.M4.Blank())
+
+    def comment(self, format, *args):
+        self.target_make.append(self.Make.Comment(format % args))
+        self.target_m4.append(self.M4.Comment(format % args))
+
+    def nvpair(self, name, value, append=False):
+        if len(name) > self.namelen:
+            self.namelen = len(name)
+        self.target_make.append(self.Make.NameValue(name, value, append))
+        self.target_m4.append(self.M4.NameValue(name, value, append))
+
+    def flag(self, name):
+        if len(name) > self.namelen:
+            self.namelen = len(name)
+        self.target_make.append(self.Make.Flag(name))
+        self.target_m4.append(self.M4.Flag(name))
+
+    def raw(self, format, *args):
+        self.target_make.append(self.Make.Raw(format % args))
+        self.target_m4.append(self.M4.Raw(format % args))
+
+    def resume_make(self):
+        self.target_make = self.make
+
+    def resume_m4(self):
+        self.target_m4 = self.m4
+
+    def suspend_make(self):
+        self.target_make = self.noop
+
+    def suspend_m4(self):
+        self.target_m4 = self.noop
+
+    def generate(self):
+        self.make.namelen = self.namelen
+        self.m4.namelen = self.namelen
+        self.make.generate('GNUmakefile')
+        self.m4.generate(os.path.join('project', project.name_lower + '.m4'))
 
 ###############################################################################
 ##
@@ -1681,212 +1768,202 @@ int main ()
 
     ## create document object
     doc = ConfigDocument()
-    doc.addComment( 'generated by configure on %s', time.strftime( '%c' ))
+    doc.comment( 'generated by configure on %s', time.strftime( '%c' ))
 
     ## add configure line for reconfigure purposes
-    doc.addBlank()
+    doc.blank()
     args = []
     for arg in Option.conf_args:
         args.append( arg[1] )
-    doc.add( 'CONF.args', ' '.join( args ))
+    doc.nvpair( 'CONF.args', ' '.join( args ))
 
-    doc.addBlank()
-    doc.add( 'HB.title',       project.title )
-    doc.add( 'HB.name',        project.name )
-    doc.add( 'HB.name.lower',  project.name_lower )
-    doc.add( 'HB.name.upper',  project.name_upper )
-    doc.add( 'HB.acro.lower',  project.acro_lower )
-    doc.add( 'HB.acro.upper',  project.acro_upper )
+    doc.blank()
+    doc.nvpair( 'HB.title',       project.title )
+    doc.nvpair( 'HB.name',        project.name )
+    doc.nvpair( 'HB.name.lower',  project.name_lower )
+    doc.nvpair( 'HB.name.upper',  project.name_upper )
+    doc.nvpair( 'HB.acro.lower',  project.acro_lower )
+    doc.nvpair( 'HB.acro.upper',  project.acro_upper )
 
-    doc.add( 'HB.url.website',    project.url_website )
-    doc.add( 'HB.url.community',  project.url_community )
-    doc.add( 'HB.url.irc',        project.url_irc )
-    doc.add( 'HB.url.appcast',    project.url_appcast )
-    doc.add( 'HB.url.appnote',    project.url_appnote )
+    doc.nvpair( 'HB.url.website',    project.url_website )
+    doc.nvpair( 'HB.url.community',  project.url_community )
+    doc.nvpair( 'HB.url.irc',        project.url_irc )
+    doc.nvpair( 'HB.url.appcast',    project.url_appcast )
+    doc.nvpair( 'HB.url.appnote',    project.url_appnote )
 
-    doc.add( 'HB.version.major',  project.vmajor )
-    doc.add( 'HB.version.minor',  project.vminor )
-    doc.add( 'HB.version.point',  project.vpoint )
-    doc.add( 'HB.version.suffix', project.suffix )
-    doc.add( 'HB.version',        project.version )
-    doc.add( 'HB.debversion',     project.debversion )
-    doc.add( 'HB.version.hex',    '%04x%02x%02x%08x' % (project.vmajor,project.vminor,project.vpoint,repo.rev) )
+    doc.nvpair( 'HB.version.major',  project.vmajor )
+    doc.nvpair( 'HB.version.minor',  project.vminor )
+    doc.nvpair( 'HB.version.point',  project.vpoint )
+    doc.nvpair( 'HB.version.suffix', project.suffix )
+    doc.nvpair( 'HB.version',        project.version )
+    doc.nvpair( 'HB.debversion',     project.debversion )
+    doc.nvpair( 'HB.version.hex',    '%04x%02x%02x%08x' % (project.vmajor,project.vminor,project.vpoint,repo.rev) )
 
-    doc.add( 'HB.build', project.build )
+    doc.nvpair( 'HB.build', project.build )
 
-    doc.add( 'HB.repo.url',       repo.url )
-    doc.add( 'HB.repo.tag',       repo.tag )
-    doc.add( 'HB.repo.rev',       repo.rev )
-    doc.add( 'HB.repo.hash',      repo.hash )
-    doc.add( 'HB.repo.shorthash', repo.shorthash )
-    doc.add( 'HB.repo.branch',    repo.branch )
-    doc.add( 'HB.repo.remote',    repo.remote )
-    doc.add( 'HB.repo.type',      repo.type )
-    doc.add( 'HB.repo.official',  repo.official )
-    doc.add( 'HB.repo.date',      repo.date.strftime("%Y-%m-%d %H:%M:%S") )
+    doc.nvpair( 'HB.repo.url',       repo.url )
+    doc.nvpair( 'HB.repo.tag',       repo.tag )
+    doc.nvpair( 'HB.repo.rev',       repo.rev )
+    doc.nvpair( 'HB.repo.hash',      repo.hash )
+    doc.nvpair( 'HB.repo.shorthash', repo.shorthash )
+    doc.nvpair( 'HB.repo.branch',    repo.branch )
+    doc.nvpair( 'HB.repo.remote',    repo.remote )
+    doc.nvpair( 'HB.repo.type',      repo.type )
+    doc.nvpair( 'HB.repo.official',  repo.official )
+    doc.nvpair( 'HB.repo.date',      repo.date.strftime("%Y-%m-%d %H:%M:%S") )
 
-    doc.addBlank()
-    doc.add( 'HOST.spec',    host.spec )
-    doc.add( 'HOST.machine', host.machine )
-    doc.add( 'HOST.vendor',  host.vendor )
-    doc.add( 'HOST.system',  host.system )
-    doc.add( 'HOST.systemf', host.systemf )
-    doc.add( 'HOST.release', host.release )
-    doc.add( 'HOST.extra',   host.extra )
-    doc.add( 'HOST.title',   '%s %s' % (host.systemf,arch.mode.default) )
-    doc.add( 'HOST.ncpu',    core.count )
+    doc.blank()
+    doc.nvpair( 'HOST.spec',    host.spec )
+    doc.nvpair( 'HOST.machine', host.machine )
+    doc.nvpair( 'HOST.vendor',  host.vendor )
+    doc.nvpair( 'HOST.system',  host.system )
+    doc.nvpair( 'HOST.systemf', host.systemf )
+    doc.nvpair( 'HOST.release', host.release )
+    doc.nvpair( 'HOST.extra',   host.extra )
+    doc.nvpair( 'HOST.title',   '%s %s' % (host.systemf,arch.mode.default) )
+    doc.nvpair( 'HOST.ncpu',    core.count )
 
-    doc.addBlank()
-    doc.add( 'BUILD.spec',    build.spec )
-    doc.add( 'BUILD.machine', build.machine )
-    doc.add( 'BUILD.vendor',  build.vendor )
-    doc.add( 'BUILD.system',  build.system )
-    doc.add( 'BUILD.systemf', build.systemf )
-    doc.add( 'BUILD.release', build.release )
-    doc.add( 'BUILD.extra',   build.extra )
-    doc.add( 'BUILD.title',   build.title )
-    doc.add( 'BUILD.ncpu',    core.count )
-    doc.add( 'BUILD.jobs',    core.jobs )
+    doc.blank()
+    doc.nvpair( 'BUILD.spec',    build.spec )
+    doc.nvpair( 'BUILD.machine', build.machine )
+    doc.nvpair( 'BUILD.vendor',  build.vendor )
+    doc.nvpair( 'BUILD.system',  build.system )
+    doc.nvpair( 'BUILD.systemf', build.systemf )
+    doc.nvpair( 'BUILD.release', build.release )
+    doc.nvpair( 'BUILD.extra',   build.extra )
+    doc.nvpair( 'BUILD.title',   build.title )
+    doc.nvpair( 'BUILD.ncpu',    core.count )
+    doc.nvpair( 'BUILD.jobs',    core.jobs )
 
-    doc.add( 'BUILD.cross', int(options.cross != None or arch.mode.mode != arch.mode.default) )
+    doc.nvpair( 'BUILD.cross', int(options.cross != None or arch.mode.mode != arch.mode.default) )
     if options.cross:
-        doc.add( 'BUILD.cross.prefix', '%s-' % (options.cross) )
+        doc.nvpair( 'BUILD.cross.prefix', '%s-' % (options.cross) )
     else:
-        doc.add( 'BUILD.cross.prefix', '' )
+        doc.nvpair( 'BUILD.cross.prefix', '' )
 
-    doc.add( 'BUILD.date',   time.strftime('%c') )
-    doc.add( 'BUILD.arch',   arch.mode.mode )
+    doc.nvpair( 'BUILD.date',   time.strftime('%c') )
+    doc.nvpair( 'BUILD.arch',   arch.mode.mode )
 
-    doc.addBlank()
-    doc.add( 'SRC',     cfg.src_final )
-    doc.add( 'SRC/',    cfg.src_final + os.sep )
-    doc.add( 'BUILD',   cfg.build_final )
-    doc.add( 'BUILD/',  cfg.build_final + os.sep )
-    doc.add( 'PREFIX',  cfg.prefix_final )
-    doc.add( 'PREFIX/', cfg.prefix_final + os.sep )
+    doc.blank()
+    doc.nvpair( 'SRC',     cfg.src_final )
+    doc.nvpair( 'SRC/',    cfg.src_final + os.sep )
+    doc.nvpair( 'BUILD',   cfg.build_final )
+    doc.nvpair( 'BUILD/',  cfg.build_final + os.sep )
+    doc.nvpair( 'PREFIX',  cfg.prefix_final )
+    doc.nvpair( 'PREFIX/', cfg.prefix_final + os.sep )
 
-    doc.addBlank()
-    doc.add( 'FEATURE.local_yasm', int( options.enable_local_yasm ))
-    doc.add( 'FEATURE.local_autotools', int( options.enable_local_autotools ))
-    doc.add( 'FEATURE.local_cmake', int( options.enable_local_cmake ))
-    doc.add( 'FEATURE.local_pkgconfig', int( options.enable_local_pkgconfig ))
-    doc.add( 'FEATURE.asm',        'disabled' )
-    doc.add( 'FEATURE.gtk',        int( not options.disable_gtk ))
-    doc.add( 'FEATURE.gtk.update.checks', int( not options.disable_gtk_update_checks ))
-    doc.add( 'FEATURE.gtk.mingw',  int( options.enable_gtk_mingw ))
-    doc.add( 'FEATURE.gst',        int( not options.disable_gst ))
-    doc.add( 'FEATURE.fdk_aac',    int( options.enable_fdk_aac ))
-    doc.add( 'FEATURE.libav_aac',  int( options.enable_libav_aac ))
-    doc.add( 'FEATURE.qsv',        int( options.enable_qsv ))
-    doc.add( 'FEATURE.xcode',      int( not (Tools.xcodebuild.fail or options.disable_xcode or options.cross) ))
-    doc.add( 'FEATURE.x265',       int( options.enable_x265 ))
+    doc.blank()
+    doc.nvpair( 'FEATURE.local_yasm', int( options.enable_local_yasm ))
+    doc.nvpair( 'FEATURE.local_autotools', int( options.enable_local_autotools ))
+    doc.nvpair( 'FEATURE.local_cmake', int( options.enable_local_cmake ))
+    doc.nvpair( 'FEATURE.local_pkgconfig', int( options.enable_local_pkgconfig ))
+    doc.nvpair( 'FEATURE.gtk',        int( not options.disable_gtk ))
+    doc.nvpair( 'FEATURE.gtk.update.checks', int( not options.disable_gtk_update_checks ))
+    doc.nvpair( 'FEATURE.gtk.mingw',  int( options.enable_gtk_mingw ))
+    doc.nvpair( 'FEATURE.gst',        int( not options.disable_gst ))
+    doc.nvpair( 'FEATURE.fdk_aac',    int( options.enable_fdk_aac ))
+    doc.nvpair( 'FEATURE.libav_aac',  int( options.enable_libav_aac ))
+    doc.nvpair( 'FEATURE.qsv',        int( options.enable_qsv ))
+    doc.nvpair( 'FEATURE.xcode',      int( not (Tools.xcodebuild.fail or options.disable_xcode or options.cross) ))
+    doc.nvpair( 'FEATURE.x265',       int( options.enable_x265 ))
+
+    ## add CPU architecture
+    Arch().add_doc( doc )
 
     if not Tools.xcodebuild.fail and not options.disable_xcode:
-        doc.addBlank()
-        doc.add( 'XCODE.driver', options.xcode_driver )
+        doc.blank()
+        doc.nvpair( 'XCODE.driver', options.xcode_driver )
         if os.path.isabs(options.xcode_symroot):
-            doc.add( 'XCODE.symroot', options.xcode_symroot )
+            doc.nvpair( 'XCODE.symroot', options.xcode_symroot )
         else:
-            doc.add( 'XCODE.symroot', os.path.abspath(os.path.join(cfg.build_dir,options.xcode_symroot)) )
-        doc.add( 'XCODE.xcconfig', xcconfigMode[xcconfigMode.mode] )
+            doc.nvpair( 'XCODE.symroot', os.path.abspath(os.path.join(cfg.build_dir,options.xcode_symroot)) )
+        doc.nvpair( 'XCODE.xcconfig', xcconfigMode[xcconfigMode.mode] )
 
     if build.system == 'mingw':
-        doc.addBlank()
+        doc.blank()
         if not dlfcn.fail:
-            doc.add( 'HAS.dlfcn', 1 )
+            doc.nvpair( 'HAS.dlfcn', 1 )
         if not pthreadGC2.fail:
-            doc.add( 'HAS.pthreadGC2', 1 )
+            doc.nvpair( 'HAS.pthreadGC2', 1 )
         elif not pthread.fail:
-            doc.add( 'HAS.pthread', 1 )
+            doc.nvpair( 'HAS.pthread', 1 )
         if not bz2.fail:
-            doc.add( 'HAS.bz2', 1 )
+            doc.nvpair( 'HAS.bz2', 1 )
         if not libz.fail:
-            doc.add( 'HAS.libz', 1 )
+            doc.nvpair( 'HAS.libz', 1 )
         if not iconv.fail:
-            doc.add( 'HAS.iconv', 1 )
+            doc.nvpair( 'HAS.iconv', 1 )
         if not regex.fail:
-            doc.add( 'HAS.regex', 1 )
+            doc.nvpair( 'HAS.regex', 1 )
         if strtok_r.fail:
-            doc.add( 'COMPAT.strtok_r', 1 )
+            doc.nvpair( 'COMPAT.strtok_r', 1 )
 
-    doc.addMake( '' )
-    doc.addMake( '## define debug mode and optimize before other includes' )
-    doc.addMake( '## since it is tested in some module.defs' )
-    doc.add( 'GCC.g', debugMode.mode )
-    doc.add( 'GCC.O', optimizeMode.mode )
-    doc.addBlank()
-    doc.addMake( '## include definitions' )
-    doc.addMake( 'include $(SRC/)make/include/main.defs' )
+    doc.suspend_m4()
+    doc.blank()
+    doc.comment( 'include main0 definitions' )
+    doc.raw( 'include $(SRC/)make/include/main0.defs' )
+    doc.resume_m4()
 
-    doc.addBlank()
+    doc.blank()
     for tool in ToolProbe.tools:
         tool.doc_add( doc )
 
-    doc.addBlank()
+    doc.blank()
     for select in SelectTool.selects:
         select.doc_add( doc )
 
-    doc.addBlank()
-    doc.add( 'GCC.archs', arch.mode.mode )
+    ## TODO: kona: nuke
+    doc.nvpair( 'CLANG.clang', '$(GCC.gcc)' )
+
+    doc.suspend_m4()
+    doc.blank()
+    doc.nvpair( 'GCC.g', debugMode.mode )
+    doc.nvpair( 'GCC.O', optimizeMode.mode )
+    doc.nvpair( 'GCC.archs', arch.mode.mode )
+    doc.nvpair( 'CLANG.g', debugMode.mode )
+    doc.nvpair( 'CLANG.O', optimizeMode.mode )
+    doc.nvpair( 'CLANG.archs', arch.mode.mode )
+
     if build.match( '*-*-darwin*' ):
-        doc.add( 'GCC.sysroot', cfg.sysroot_dir )
-        doc.add( 'GCC.minver', cfg.minver )
+        doc.nvpair( 'GCC.sysroot', cfg.sysroot_dir )
+        doc.nvpair( 'GCC.minver', cfg.minver )
+        doc.nvpair( 'CLANG.minver', cfg.minver )
+        doc.nvpair( 'CLANG.sysroot', cfg.sysroot_dir )
     else:
-        doc.add( 'GCC.sysroot', '' )
-        doc.add( 'GCC.minver', '' )
-
-    if build.match( 'i?86-*' ):
-        doc.add( 'LIBHB.GCC.D', 'ARCH_X86_32', append=True )
-    elif build.match( 'x86_64-*' ):
-        doc.add( 'LIBHB.GCC.D', 'ARCH_X86_64', append=True )
-
-    if options.enable_asm and ( not Tools.yasm.fail or options.enable_local_yasm ):
-        asm = ''
-        if build.match( 'i?86-*' ):
-            asm = 'x86'
-            doc.add( 'LIBHB.GCC.D', 'HAVE_MMX', append=True )
-            doc.add( 'LIBHB.YASM.D', 'ARCH_X86', append=True )
-            if build.match( '*-*-darwin*' ):
-                doc.add( 'LIBHB.YASM.f', 'macho32' )
-            else:
-                doc.add( 'LIBHB.YASM.f', 'elf32' )
-            doc.add( 'LIBHB.YASM.m', 'x86' )
-        elif build.match( 'x86_64-*' ):
-            asm = 'x86'
-            doc.add( 'LIBHB.GCC.D', 'HAVE_MMX ARCH_X86_64', append=True )
-            if build.match( '*-*-darwin*' ):
-                doc.add( 'LIBHB.YASM.D', 'ARCH_X86_64 PIC', append=True )
-                doc.add( 'LIBHB.YASM.f', 'macho64' )
-            else:
-                doc.add( 'LIBHB.YASM.D', 'ARCH_X86_64', append=True )
-                doc.add( 'LIBHB.YASM.f', 'elf64' )
-            doc.add( 'LIBHB.YASM.m', 'amd64' )
-        doc.update( 'FEATURE.asm', asm )
+        doc.nvpair( 'GCC.sysroot', '' )
+        doc.nvpair( 'GCC.minver', '' )
+        doc.nvpair( 'CLANG.sysroot', '' )
+        doc.nvpair( 'CLANG.minver', '' )
+    doc.resume_m4()
 
     ## add exports to make
     if len(exports):
-        doc.addBlank()
-        doc.addComment( 'overrides via VARIABLE=VALUE on command-line' )
+        doc.blank()
+        doc.comment( 'overrides via VARIABLE=VALUE on command-line' )
         for nv in exports:
-            doc.add( nv[0], nv[1] )
+            doc.nvpair( nv[0], nv[1] )
 
-    doc.addMake( '' )
-    doc.addMake( '## include custom definitions' )
-    doc.addMake( '-include $(SRC/)custom.defs' )
-    doc.addMake( '-include $(BUILD/)GNUmakefile.custom.defs' )
+    doc.suspend_m4()
+    doc.blank()
+    doc.comment( 'include main1 definitions' )
+    doc.raw( 'include $(SRC/)make/include/main1.defs' )
 
-    doc.addMake( '' )
-    doc.addMake( '## include rules' )
-    doc.addMake( 'include $(SRC/)make/include/main.rules' )
-    doc.addMake( '-include $(SRC/)custom.rules' )
-    doc.addMake( '-include $(BUILD/)GNUmakefile.custom.rules' )
+    doc.blank()
+    doc.raw( '## include custom definitions' )
+    doc.raw( '-include $(SRC/)custom.defs' )
+    doc.raw( '-include $(BUILD/)GNUmakefile.custom.defs' )
 
-    ## chdir
+    doc.blank()
+    doc.raw( '## include rules' )
+    doc.raw( 'include $(SRC/)make/include/main.rules' )
+    doc.raw( '-include $(SRC/)custom.rules' )
+    doc.raw( '-include $(BUILD/)GNUmakefile.custom.rules' )
+    doc.resume_m4()
+
+    ## chdir and generate
     cfg.chdir()
+    doc.generate()
 
-    ## perform
-    doc.write( 'make' )
-    doc.write( 'm4' )
     if options.launch:
         Launcher( targets )
 

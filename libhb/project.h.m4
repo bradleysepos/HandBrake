@@ -39,4 +39,7 @@ dnl
 <<#>>define HB_PROJECT_BUILD_TITLE     "__BUILD_title"
 <<#>>define HB_PROJECT_BUILD_ARCH      "__BUILD_arch"
 
+patsubst(__ARCH_flags_def, <<\(\w+\)\W*>>, <<<<#>>define format(<<%-*s>>, <<30>>, <<HB_ARCH_FLAG_\1>>) 1
+>>)dnl
+
 #endif /* HB_PROJECT_PROJECT_H */

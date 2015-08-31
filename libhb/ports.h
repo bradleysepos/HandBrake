@@ -10,10 +10,6 @@
 #ifndef HB_PORTS_H
 #define HB_PORTS_H
 
-#if ARCH_X86_64 || ARCH_X86_32
-#define ARCH_X86
-#endif
-
 #if defined(_WIN32)
 #define DIR_SEP_STR "\\"
 #define DIR_SEP_CHAR '\\'
