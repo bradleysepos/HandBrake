@@ -1,13 +1,3 @@
-include $(SRC/)make/include/base.defs
-include $(SRC/)make/include/contrib.defs
-include $(SRC/)make/include/function.defs
-include $(SRC/)make/include/gcc.defs
-include $(SRC/)make/include/select.defs
-include $(SRC/)make/include/target.defs
-include $(SRC/)make/include/tool.defs
-
-###############################################################################
-
 ifeq (1,$(FEATURE.local_pkgconfig))
     MODULES += contrib/pkgconfig
 endif

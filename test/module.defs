@@ -41,7 +41,7 @@ BUILD.out += $(TEST.install.exe)
 
 ###############################################################################
 
-TEST.GCC.I += $(LIBHB.GCC.I)
+TEST.GCC.I += $(LIBHB.CLANG.I)
 
 ifeq ($(BUILD.system),darwin)
     TEST.GCC.f += IOKit CoreServices AudioToolbox Foundation

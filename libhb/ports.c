@@ -277,15 +277,15 @@ const char* hb_get_cpu_platform_name()
     }
 }
 
-#if ARCH_X86_64
+#if HB_ARCH_FLAG_X86_64
 #    define REG_b "rbx"
 #    define REG_S "rsi"
-#elif ARCH_X86_32
+#elif HB_ARCH_FLAG_X86_32
 #    define REG_b "ebx"
 #    define REG_S "esi"
-#endif // ARCH_X86_32
+#endif // HB_ARCH_FLAG_X86_32
 
-#if ARCH_X86_64 || ARCH_X86_32
+#if HB_ARCH_FLAG_X86
 #define cpuid(index, eax, ebx, ecx, edx)                        \
     __asm__ volatile (                                          \
         "mov    %%"REG_b", %%"REG_S" \n\t"                      \
@@ -293,7 +293,7 @@ const char* hb_get_cpu_platform_name()
         "xchg   %%"REG_b", %%"REG_S                             \
         : "=a" (*eax), "=S" (*ebx), "=c" (*ecx), "=d" (*edx)    \
         : "0" (index))
-#endif // ARCH_X86_64 || ARCH_X86_32
+#endif // HB_ARCH_FLAG_X86
 
 static void init_cpu_info()
 {
@@ -303,7 +303,7 @@ static void init_cpu_info()
 
     if (av_get_cpu_flags() & AV_CPU_FLAG_SSE)
     {
-#if ARCH_X86_64 || ARCH_X86_32
+#if HB_ARCH_FLAG_X86
         int eax, ebx, ecx, edx, family, model;
 
         cpuid(1, &eax, &ebx, &ecx, &edx);
@@ -394,7 +394,7 @@ static void init_cpu_info()
                 hb_cpu_info.name++;
             }
         }
-#endif // ARCH_X86_64 || ARCH_X86_32
+#endif // HB_ARCH_FLAG_X86
     }
 }
 

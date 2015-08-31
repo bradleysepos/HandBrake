@@ -3,16 +3,17 @@ $(eval $(call import.MODULE.rules,LIBHB))
 libhb.build: $(LIBHB.a)
 
 $(LIBHB.a): | $(dir $(LIBHB.a))
-$(LIBHB.a): $(LIBHB.c.o) $(LIBHB.m.o) $(LIBHB.yasm.o)
+$(LIBHB.a): $(LIBHB.c.o) $(LIBHB.m.o)
 	$(AR.exe) rsu $@ $^
 
 $(LIBHB.c.o): $(LIBHB.d)
 $(LIBHB.c.o): | $(dir $(LIBHB.c.o))
 $(LIBHB.c.o): $(BUILD/)%.o: $(SRC/)%.c
-	$(call LIBHB.GCC.C_O,$@,$<)
+	$(call LIBHB.process_c_o,$@,$<,$(LIBHB.build/),$(LIBHB.src/))
+
 $(LIBHB.m.o): | $(dir $(LIBHB.m.o))
 $(LIBHB.m.o): $(BUILD/)%.o: $(SRC/)%.m
-	$(call LIBHB.GCC.C_O,$@,$<)
+	$(call LIBHB.process_c_o,$@,$<,$(LIBHB.build/),$(LIBHB.src/))
 
 $(LIBHB.m4.out): $(BUILD/)project/handbrake.m4
 $(LIBHB.m4.out): | $(dir $(LIBHB.m4.out))
@@ -28,24 +29,13 @@ libhb.clean:
 
 ###############################################################################
 
-ifneq (disabled,$(FEATURE.asm))
-
-$(LIBHB.yasm.o): $(LIBHB.yasm.d)
-$(LIBHB.yasm.o): | $(dir $(LIBHB.yasm.o))
-$(LIBHB.yasm.o): $(LIBHB.yasm.build/)%.o: $(LIBHB.yasm.src/)%.asm
-	$(call LIBHB.YASM.ASM_O,$@,$<)
-
-endif
-
-###############################################################################
-
 ifeq (1-mingw,$(BUILD.cross)-$(BUILD.system))
 
 libhb.build: $(LIBHB.dll)
 
 $(LIBHB.dll): | $(dirname $(LIBHB.dll) $(LIBHB.lib))
-$(LIBHB.dll): $(LIBHB.c.o) $(LIBHB.yasm.o)
-	$(call LIBHB.GCC.DYLIB++,$@,$^ $(LIBHB.dll.libs))
+$(LIBHB.dll): $(LIBHB.c.o)
+	$(call LIBHB.link_dylib++,$@,$^ $(LIBHB.dll.libs))
 
 endif
 

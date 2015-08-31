@@ -1,0 +1,236 @@
+## C-LANGUAGE namespace
+
+CLANG.clang      = clang
+CLANG.clang/type = regular
+
+CLANG.clang++      = $(dir $(call __NAMESPACE.var,CLANG.clang))$(subst gcc,g++,$(subst clang,clang++,$(notdir $(call __NAMESPACE.var,CLANG.clang))))
+CLANG.clang++/type = regular
+
+CLANG.pipe      = 1
+CLANG.pipe/type = optional
+CLANG.pipe/args = -pipe
+
+CLANG.strip      = $(if $(filter none,$(call __NAMESPACE.var,CLANG.g)),1)
+CLANG.strip/type = optional
+CLANG.strip/args = -Wl,-S
+
+CLANG.dylib      = 1
+CLANG.dylib/type = optional
+CLANG.dylib/args = -dynamiclib
+
+CLANG.std      = gnu99
+CLANG.std/type = function
+CLANG.std/args = -std=$1
+
+CLANG.ML      = 0
+CLANG.ML/type = function
+CLANG.ML/args = -fmessage-length=$1
+
+CLANG.H      =
+CLANG.H/type = optional
+CLANG.H/args = -H
+
+CLANG.W      = all
+CLANG.W/type = list
+CLANG.W/args = -W$1
+
+CLANG.arch      =
+CLANG.arch/type = list
+CLANG.arch/args = -arch $1
+
+CLANG.m      =
+CLANG.m/type = regular
+
+CLANG.sysroot      =
+CLANG.sysroot/type = function
+CLANG.sysroot/args = --sysroot=$1
+
+CLANG.minver      =
+CLANG.minver/type = function
+CLANG.minver/args = -mmacosx-version-min=$1
+
+CLANG.vis      =
+CLANG.vis/type = optional
+CLANG.vis/args = -fvisibility=hidden
+
+CLANG.pic      =
+CLANG.pic/type = optional
+CLANG.pic/args = -fPIC
+
+CLANG.g           = none
+CLANG.g/type      = enum
+CLANG.g/args.none = -g0
+CLANG.g/args.min  = -gdwarf-2 -g1
+CLANG.g/args.std  = -gdwarf-2
+CLANG.g/args.max  = -gdwarf-2 -g3
+
+CLANG.O              = none
+CLANG.O/type         = enum
+CLANG.O/args.none    = -O0
+CLANG.O/args.size    = -Os
+CLANG.O/args.speed   = -O3
+
+CLANG.D      =
+CLANG.D/type = list
+CLANG.D/args = -D$1
+
+CLANG.I      =
+CLANG.I/type = list
+CLANG.I/args = -I$1
+
+CLANG.muldefs      =
+CLANG.muldefs/type = optional
+CLANG.muldefs/args = -Wl,--allow-multiple-definition
+
+CLANG.start      =
+CLANG.start/type = optional
+CLANG.start/args = -Wl,--start-group
+
+CLANG.a      =
+CLANG.a/type = regular
+
+CLANG.F      =
+CLANG.F/type = list
+CLANG.F/args = -F$1
+
+CLANG.f      =
+CLANG.f/type = list
+CLANG.f/args = -framework $1
+
+CLANG.L      =
+CLANG.L/type = list
+CLANG.L/args = -L$1
+
+CLANG.l      =
+CLANG.l/type = list
+CLANG.l/args = -l$1
+
+CLANG.end      =
+CLANG.end/type = optional
+CLANG.end/args = -Wl,--end-group
+
+CLANG.c      = 2
+CLANG.c/type = rule-function
+CLANG.c/args = -c $2
+
+CLANG.o      = 1
+CLANG.o/type = rule-function
+CLANG.o/args = -o $1
+
+CLANG.in      = 1
+CLANG.in/type = rule-function
+CLANG.in/args = $2
+
+## TODO
+ifeq (1,0)
+CLANG.extra         = 1
+CLANG.extra.h_o     = 1
+CLANG.extra.c_o     = 1
+CLANG.extra.dylib   = 1
+CLANG.extra.exe     = 1
+CLANG.extra.hpp_o   = 1
+CLANG.extra.cpp_o   = 1
+CLANG.extra.dylib++ = 1
+CLANG.extra.exe++   = 1
+
+CLANG.args.extra         = $(CFLAGS) $(CPPFLAGS)
+CLANG.args.extra.h_o     =
+CLANG.args.extra.c_o     =
+CLANG.args.extra.dylib   = $(LDFLAGS)
+CLANG.args.extra.exe     = $(LDFLAGS)
+CLANG.args.extra.hpp_o   =
+CLANG.args.extra.cpp_o   =
+CLANG.args.extra.dylib++ = $(LDFLAGS)
+CLANG.args.extra.exe++   = $(LDFLAGS)
+endif
+
+###############################################################################
+
+## FUNCTION: return applicable filter namespaces
+## $1 base function name; i.e. prefix of .ns_patterns
+## $2 candidate files
+__CLANG.ns_patterns = $(foreach p,$($1.ns_patterns),$(if $(filter $p,$2),$1/$p/))
+
+## $1 namespace
+define import.CLANG.process_c_o
+    $(if $1,,$(error $$1 must be specified))
+    $(eval __tmp.name := $(call __NAMESPACE.prefix,$1,process_c_o))
+    $(eval __tmp.ns := $(or $1,.))
+
+    ## command specification of namespace-scoped vars prefixed with 'CLANG.'
+    $(__tmp.name).spec = clang pipe std ML H W arch m sysroot minver vis pic g O D I c o
+
+    ## pattern-based filter
+    $(__tmp.name).ns_patterns =
+
+    ## FUNCTION: process .c to .o
+    ## $1 = output file
+    ## $2 = input file...
+    ## $3 = output file directory prefix
+    ## $4 = intput file directory prefix
+    $(__tmp.name) = $$(strip \
+        $$(eval NAMESPACE := $1/$$(patsubst $$(abspath $$3)/%,%,$$(abspath $$1))/ $1/$$(patsubst $$(abspath $$4)/%,%,$$(abspath $$2))/ $$(call __CLANG.ns_patterns,$1,$$(patsubst $$(abspath $$3)/%,%,$$(abspath $$1)) $$(patsubst $$(abspath $$4)/%,%,$$(abspath $$2))) $(__tmp.name) $(__tmp.ns)) \
+        $$(call __NAMESPACE.command,$$(foreach x,$$($(__tmp.name).spec),CLANG.$$x),$$1,$$2) \
+        $$(eval NAMESPACE :=) \
+        )
+
+    $(eval __tmp.ns :=)
+    $(eval __tmp.name :=)
+endef
+
+## $1 namespace
+define import.CLANG.commands
+    $(eval __tmp.ns := $(or $1,.))
+    $(eval __tmp.prefix := $(call __NAMESPACE.prefix,$1,))
+
+    ## FUNCTION: compile C source
+    $(__tmp.prefix)CLANG.process_c_o.spec = clang pipe std ML H W arch sysroot minver vis pic g O D I c o
+    $(__tmp.prefix)CLANG.process_c_o = $$(strip \
+        $$(eval NAMESPACE := $(__tmp.prefix)CLANG.process_c_o/$$(patsubst $$(abspath $$3)/%,%,$$(abspath $$1))/ $(__tmp.prefix)CLANG.process_c_o/$$(patsubst $$(abspath $$4)/%,%,$$(abspath $$2))/ $(__tmp.prefix)CLANG.process_c_o $(__tmp.ns)) \
+        $$(call __NAMESPACE.command,$$(foreach x,$$($(__tmp.prefix)CLANG.process_c_o.spec),CLANG.$$x),$$1,$$2) \
+        $$(eval NAMESPACE :=) \
+        )
+
+    ## FUNCTION: compile C++ source
+    $(__tmp.prefix)CLANG.cpp_o.spec = clang++ pipe std ML H W archs sysroot minver vis pic g O D I c o
+    $(__tmp.prefix)CLANG.cpp_o = $$(strip \
+        $$(eval NAMESPACE := $(__tmp.prefix)CLANG.cpp_o/$$(patsubst $$(abspath $$3)/%,%,$$(abspath $$1))/ $(__tmp.prefix)CLANG.cpp_o/$$(patsubst $$(abspath $$4)/%,%,$$(abspath $$2))/ $(__tmp.prefix)CLANG.cpp_o $(__tmp.ns)) \
+        $$(call __NAMESPACE.command,$$(foreach x,$$($(__tmp.prefix)CLANG.cpp_o.spec),CLANG.$$x),$$1,$$2) \
+        $$(eval NAMESPACE :=) \
+        )
+
+    # FUNCTION: link C dynamic library
+    $(__tmp.prefix)CLANG.link_dylib.spec = clang pipe std strip dylib ML W archs sysroot minver vis pic g O D I o muldefs start F f L l in end
+    $(__tmp.prefix)CLANG.link_dylib = $$(strip \
+        $$(eval NAMESPACE := $(__tmp.prefix)CLANG.link_dylib/$$(patsubst $$3/%,%,$$1)/ $(__tmp.prefix)CLANG.link_dylib $(__tmp.ns)) \
+        $$(call __NAMESPACE.command,$$(foreach x,$$($(__tmp.prefix)CLANG.link_dylib.spec),CLANG.$$x),$$1,$$2) \
+        $$(eval NAMESPACE :=) \
+        )
+
+    # FUNCTION: link C executable
+    $(__tmp.prefix)CLANG.link_exe.spec = clang pipe std strip ML W archs sysroot minver vis pic g O D I o muldefs start F f L l in end
+    $(__tmp.prefix)CLANG.link_exe = $$(strip \
+        $$(eval NAMESPACE := $(__tmp.prefix)CLANG.link_exe/$$(patsubst $$3/%,%,$$1)/ $(__tmp.prefix)CLANG.link_exe $(__tmp.ns)) \
+        $$(call __NAMESPACE.command,$$(foreach x,$$($(__tmp.prefix)CLANG.link_exe.spec),CLANG.$$x),$$1,$$2) \
+        $$(eval NAMESPACE :=) \
+        )
+
+    # FUNCTION: link C++ dynamic library
+    $(__tmp.prefix)CLANG.link_dylib++.spec = clang++ pipe std strip dylib ML W archs sysroot minver vis pic g O D I o muldefs start F f L l in end
+    $(__tmp.prefix)CLANG.link_dylib++ = $$(strip \
+        $$(eval NAMESPACE := $(__tmp.prefix)CLANG.link_dylib++/$$(patsubst $$3/%,%,$$1)/ $(__tmp.prefix)CLANG.link_dylib++ $(__tmp.ns)) \
+        $$(call __NAMESPACE.command,$$(foreach x,$$($(__tmp.prefix)CLANG.link_dylib++.spec),CLANG.$$x),$$1,$$2) \
+        $$(eval NAMESPACE :=) \
+        )
+
+    # FUNCTION: link C++ executable
+    $(__tmp.prefix)CLANG.link_exe++.spec = clang++ pipe std strip ML W archs sysroot minver vis pic g O D I o muldefs start F f L l in end
+    $(__tmp.prefix)CLANG.link_exe++ = $$(strip \
+        $$(eval NAMESPACE := $(__tmp.prefix)CLANG.link_exe++/$$(patsubst $$3/%,%,$$1)/ $(__tmp.prefix)CLANG.link_exe++ $(__tmp.ns)) \
+        $$(call __NAMESPACE.command,$$(foreach x,$$($(__tmp.prefix)CLANG.link_exe++.spec),CLANG.$$x),$$1,$$2) \
+        $$(eval NAMESPACE :=) \
+        )
+
+    $(eval __tmp.prefix :=)
+    $(eval __tmp.ns :=)
+endef
