@@ -4,12 +4,12 @@ test.build: $(TEST.exe)
 
 $(TEST.exe): | $(dir $(TEST.exe))
 $(TEST.exe): $(TEST.c.o)
-	$(call TEST.GCC.EXE++,$@,$^ $(TEST.libs))
+	$(call TEST.link_exe++,$@,$^ $(TEST.libs),$(TEST.build/),$(TEST.src/))
 
 $(TEST.c.o): $(LIBHB.a)
 $(TEST.c.o): | $(dir $(TEST.c.o))
 $(TEST.c.o): $(BUILD/)%.o: $(SRC/)%.c
-	$(call TEST.GCC.C_O,$@,$<)
+	$(call TEST.process_c_o,$@,$<)
 
 test.clean:
 	$(RM.exe) -f $(TEST.out)

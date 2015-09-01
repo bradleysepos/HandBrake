@@ -1922,7 +1922,7 @@ int main ()
     doc.nvpair( 'GCC.archs', arch.mode.mode )
     doc.nvpair( 'CLANG.g', debugMode.mode )
     doc.nvpair( 'CLANG.O', optimizeMode.mode )
-    doc.nvpair( 'CLANG.archs', arch.mode.mode )
+    doc.nvpair( 'CLANG.arch', arch.mode.mode )
 
     if build.match( '*-*-darwin*' ):
         doc.nvpair( 'GCC.sysroot', cfg.sysroot_dir )

@@ -14,6 +14,10 @@ CLANG.strip      = $(if $(filter none,$(call __NAMESPACE.var,CLANG.g)),1)
 CLANG.strip/type = optional
 CLANG.strip/args = -Wl,-S
 
+CLANG.static      =
+CLANG.static/type = optional
+CLANG.static/args = -static
+
 CLANG.dylib      = 1
 CLANG.dylib/type = optional
 CLANG.dylib/args = -dynamiclib
@@ -180,7 +184,34 @@ define import.CLANG.process_c_o
 endef
 
 ## $1 namespace
-define import.CLANG.commands
+define import.CLANG.link_exe++
+    $(if $1,,$(error $$1 must be specified))
+    $(eval __tmp.name := $(call __NAMESPACE.prefix,$1,link_exe++))
+    $(eval __tmp.ns := $(or $1,.))
+
+    ## command specification of namespace-scoped vars prefixed with 'CLANG.'
+    $(__tmp.name).spec = clang++ pipe std strip ML W arch m sysroot minver vis pic g O D I o muldefs start F f L l in end
+
+    ## pattern-based filter
+    $(__tmp.name).ns_patterns =
+
+    ## FUNCTION: link C++ executable
+    ## $1 = output file
+    ## $2 = input file...
+    ## $3 = output file directory prefix
+    ## $4 = intput file directory prefix
+    $(__tmp.name) = $$(strip \
+        $$(eval NAMESPACE := $1/$$(patsubst $$(abspath $$3)/%,%,$$(abspath $$1))/ $1/$$(patsubst $$(abspath $$4)/%,%,$$(abspath $$2))/ $$(call __CLANG.ns_patterns,$1,$$(patsubst $$(abspath $$3)/%,%,$$(abspath $$1)) $$(patsubst $$(abspath $$4)/%,%,$$(abspath $$2))) $(__tmp.name) $(__tmp.ns)) \
+        $$(call __NAMESPACE.command,$$(foreach x,$$($(__tmp.name).spec),CLANG.$$x),$$1,$$2) \
+        $$(eval NAMESPACE :=) \
+        )
+
+    $(eval __tmp.ns :=)
+    $(eval __tmp.name :=)
+endef
+
+## $1 namespace
+define DISABLED.import.CLANG.commands
     $(eval __tmp.ns := $(or $1,.))
     $(eval __tmp.prefix := $(call __NAMESPACE.prefix,$1,))
 
