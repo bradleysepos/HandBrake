@@ -1,5 +1,8 @@
 $(eval $(call import.MODULE.defs,TEST,test,LIBHB))
-$(eval $(call import.GCC,TEST))
+$(eval $(call import.CLANG.process_c_o,TEST))
+$(eval $(call import.CLANG.link_exe++,TEST))
+
+TEST.ns_search = .
 
 TEST.src/   = $(SRC/)test/
 TEST.build/ = $(BUILD/)test/
@@ -9,25 +12,25 @@ TEST.c.o = $(patsubst $(SRC/)%.c,$(BUILD/)%.o,$(TEST.c))
 
 TEST.exe = $(BUILD/)$(call TARGET.exe,$(HB.name)CLI)
 
-TEST.GCC.L = $(CONTRIB.build/)lib
+TEST.CLANG.L = $(CONTRIB.build/)lib
 
 TEST.libs = $(LIBHB.a)
 
-TEST.GCC.l = \
+TEST.CLANG.l = \
         ass avcodec avformat avutil avresample dvdnav dvdread \
         fontconfig fribidi mp3lame ogg \
         samplerate swscale vpx theoraenc theoradec vorbis vorbisenc x264 \
         bluray freetype xml2 bz2 z jansson
 
 ifeq (1,$(FEATURE.qsv))
-    TEST.GCC.D += USE_QSV HAVE_THREADS=1
+    TEST.CLANG.D += USE_QSV HAVE_THREADS=1
 endif
 
 ifeq (1,$(FEATURE.x265))
-    TEST.GCC.D += USE_X265
+    TEST.CLANG.D += USE_X265
 endif
 
-TEST.GCC.l += $(foreach m,$(MODULES.NAMES),$($m.OSL.libs))
+TEST.CLANG.l += $(foreach m,$(MODULES.NAMES),$($m.OSL.libs))
 
 TEST.install.exe = $(DESTDIR)$(PREFIX/)bin/$(notdir $(TEST.exe))
 
@@ -41,31 +44,31 @@ BUILD.out += $(TEST.install.exe)
 
 ###############################################################################
 
-TEST.GCC.I += $(LIBHB.CLANG.I)
+TEST.CLANG.I += $(LIBHB.CLANG.I)
 
 ifeq ($(BUILD.system),darwin)
-    TEST.GCC.f += IOKit CoreServices AudioToolbox Foundation
-    TEST.GCC.l += iconv
+    TEST.CLANG.f += IOKit CoreServices AudioToolbox Foundation
+    TEST.CLANG.l += iconv
 else ifeq ($(BUILD.system),linux)
-    TEST.GCC.l += pthread dl m
+    TEST.CLANG.l += pthread dl m
 else ifeq ($(BUILD.system),kfreebsd)
-    TEST.GCC.l += pthread dl m
+    TEST.CLANG.l += pthread dl m
 else ifeq ($(BUILD.system),solaris)
-    TEST.GCC.l += pthread nsl socket iconv
-    TEST.GCC.D += _POSIX_C_SOURCE=200112L __EXTENSIONS__
+    TEST.CLANG.l += pthread nsl socket iconv
+    TEST.CLANG.D += _POSIX_C_SOURCE=200112L __EXTENSIONS__
 else ifeq (1-mingw,$(BUILD.cross)-$(BUILD.system))
 ifeq ($(HAS.dlfcn),1)
-    TEST.GCC.l += dl
+    TEST.CLANG.l += dl
 endif
 ifeq (1,$(FEATURE.hwd))
-    TEST.GCC.D += USE_HWD
+    TEST.CLANG.D += USE_HWD
 endif
 ifeq (1,$(HAS.pthread))
-    TEST.GCC.l += pthread
+    TEST.CLANG.l += pthread
 else
-    TEST.GCC.l += pthreadGC2
+    TEST.CLANG.l += pthreadGC2
 endif
-    TEST.GCC.l += iconv ws2_32 regex uuid ole32
-    TEST.GCC.D += PTW32_STATIC_LIB
-    TEST.GCC.args.extra.exe++ += -static
+    TEST.CLANG.l += iconv ws2_32 regex uuid ole32
+    TEST.CLANG.D += PTW32_STATIC_LIB
+    TEST.CLANG.static = 1
 endif #   (1-mingw,$(BUILD.cross)-$(BUILD.system))
