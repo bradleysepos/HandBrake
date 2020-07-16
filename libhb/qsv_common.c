@@ -2526,13 +2526,13 @@ static HRESULT unlock_device(
 
 static int hb_qsv_find_surface_idx(const QSVMid *mids, const int nb_mids, const QSVMid *mid)
 {
-    if(mids)
+    if (mids)
     {
-        const QSVMid *m = &mids[0];
         int i;
         for (i = 0; i < nb_mids; i++) {
-            m = &mids[i];
-            if ( (m->texture == mid->texture) && (m->handle == mid->handle) )
+            const QSVMid *m = &mids[i];
+            if ((m->handle_pair.first == mid->handle_pair.first) &&
+                (m->handle_pair.second == mid->handle_pair.second))
                 return i;
         }
     }
@@ -2625,8 +2625,8 @@ static int hb_qsv_allocate_dx11_encoder_pool(ID3D11Device *device, ID3D11Texture
         }
 
         QSVMid *mid = &hb_enc_qsv_frames_ctx.mids[i];
-        mid->handle = 0;
-        mid->texture = texture;
+        mid->handle_pair.first = texture;
+        mid->handle_pair.second = 0;
     }
     return 0;
 }
@@ -2638,11 +2638,11 @@ static int hb_qsv_deallocate_dx11_encoder_pool()
         for (size_t i = 0; i < hb_enc_qsv_frames_ctx.nb_mids; i++)
         {
             QSVMid *mid = &hb_enc_qsv_frames_ctx.mids[i];
-            ID3D11Texture2D* texture = mid->texture;
+            ID3D11Texture2D* texture = mid->handle_pair.first;
             if (texture)
             {
                 HRESULT hr = ID3D11Texture2D_Release(texture);
-                mid->texture = NULL;
+                mid->handle_pair.first = NULL;
                 if (hr != S_OK)
                 {
                     hb_error("hb_qsv_deallocate_dx11_encoder_pool: ID3D11Device_ReleaseTexture2D error");
@@ -2736,6 +2736,7 @@ hb_buffer_t* hb_qsv_copy_frame(AVFrame *frame, hb_qsv_context *qsv_ctx)
     if (device_manager_handle_type == MFX_HANDLE_D3D9_DEVICE_MANAGER)
     {
         mfxFrameSurface1* input_surface = (mfxFrameSurface1*)frame->data[3];
+        mfxHDLPair* input_pair = (mfxHDLPair*)input_surface->Data.MemId;
 
         // copy all surface fields
         *output_surface = *input_surface;
@@ -2751,7 +2752,7 @@ hb_buffer_t* hb_qsv_copy_frame(AVFrame *frame, hb_qsv_context *qsv_ctx)
             hb_error("hb_qsv_copy_frame: lock_device failded %d", result);
             return out;
         }
-        result = IDirect3DDevice9_StretchRect(pDevice, input_surface->Data.MemId, 0, mid->handle, 0, D3DTEXF_LINEAR);
+        result = IDirect3DDevice9_StretchRect(pDevice, input_pair->first, 0, mid->handle_pair.first, 0, D3DTEXF_LINEAR);
         if (FAILED(result))
         {
             hb_error("hb_qsv_copy_frame: IDirect3DDevice9_StretchRect failded %d", result);
@@ -2767,13 +2768,14 @@ hb_buffer_t* hb_qsv_copy_frame(AVFrame *frame, hb_qsv_context *qsv_ctx)
     else if (device_manager_handle_type == MFX_HANDLE_D3D11_DEVICE)
     {
         mfxFrameSurface1* input_surface = (mfxFrameSurface1*)frame->data[3];
+        mfxHDLPair* input_pair = (mfxHDLPair*)input_surface->Data.MemId;
 
         // copy all surface fields
         *output_surface = *input_surface;
         // replace the mem id to mem id from the pool
         output_surface->Data.MemId = mid;
         // copy input sufrace to sufrace from the pool
-        ID3D11DeviceContext_CopySubresourceRegion(device_context, mid->texture, (uint64_t)mid->handle, 0, 0, 0, hb_enc_qsv_frames_ctx.input_texture, (uint64_t)input_surface->Data.MemId, NULL);
+        ID3D11DeviceContext_CopySubresourceRegion(device_context, mid->handle_pair.first, (uint64_t)mid->handle_pair.second, 0, 0, 0, input_pair->first, input_pair->second, NULL);
         ID3D11DeviceContext_Flush(device_context);
     }
     else
@@ -2882,7 +2884,8 @@ static int qsv_init(AVCodecContext *s)
         return ret;
     }
 
-    hb_enc_qsv_frames_ctx.input_texture = frames_hwctx->texture;
+    mfxHDLPair* handle_pair = (mfxHDLPair*)frames_hwctx->surfaces[0].Data.MemId;
+    hb_enc_qsv_frames_ctx.input_texture = (handle_pair->second != MFX_INFINITE) ? handle_pair->first : NULL;
 
     av_buffer_unref(&enc_hw_frames_ctx);
     enc_hw_frames_ctx = av_hwframe_ctx_alloc(hb_hw_device_ctx);

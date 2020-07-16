@@ -223,9 +223,7 @@ const char* hb_qsv_impl_get_via_name(int impl);
 
 typedef struct QSVMid {
     AVBufferRef *hw_frames_ref;
-    mfxHDL handle;
-
-    void *texture;
+    mfxHDLPair handle_pair;
 
     AVFrame *locked_frame;
     AVFrame *hw_frame;
