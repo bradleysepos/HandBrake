@@ -8,3 +8,6 @@ FRIBIDI.FETCH.basename = fribidi-1.0.7.tar.gz
 
 FRIBIDI.CONFIGURE.bootstrap = rm -fr aclocal.m4 autom4te.cache configure; autoreconf -I m4 -fiv;
 
+ifeq ($(HOST.system),darwin)
+    FRIBIDI.CONFIGURE.extra = CFLAGS_FOR_BUILD="-arch $(BUILD.machine)"
+endif
