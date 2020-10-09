@@ -7,7 +7,7 @@ UB.products/ = xroot/
 UB.frameworks/  = HandBrake.app/Contents/Frameworks/
 UB.xpcServices/ = HandBrake.app/Contents/XPCServices/
 
-UB.BUILD = $(SRC/)configure --force --build=ub.$(1) --xcode-config=$(1) --launch --launch-quiet
+UB.BUILD = $(SRC/)configure --force --build=ub.$(1) --xcode-config=$(1) --harden --sandbox --launch --launch-quiet
 
 ## linefeed is important
 define UB.BUILD.item
@@ -24,45 +24,45 @@ define UB.BUILD.PARALLEL
 endef
 
 define UB.COMBINE
-	$(RM.exe) -fr ub.combine
-	$(MKDIR.exe) -p ub.combine
-	$(CP.exe) ub.$(UB.first)/$(UB.products/)HandBrakeCLI ub.combine/.
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)HandBrakeCLI) -create -output ub.combine/HandBrakeCLI
-	$(CP.exe) -R ub.$(UB.first)/$(UB.products/)HandBrake.app ub.combine/.
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(1)) -create -output ub.combine/$(1)
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.frameworks/)HandBrakeKit.framework/Versions/A/HandBrakeKit) -create -output ub.combine/$(UB.frameworks/)HandBrakeKit.framework/Versions/A/HandBrakeKit
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.frameworks/)Sparkle.framework/Versions/A/Sparkle) -create -output ub.combine/$(UB.frameworks/)Sparkle.framework/Versions/A/Sparkle
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.frameworks/)Sparkle.framework/Versions/A/Resources/Autoupdate) -create -output ub.combine/$(UB.frameworks/)Sparkle.framework/Versions/A/Resources/Autoupdate
+	$(RM.exe) -fr $(UB.products/)
+	$(MKDIR.exe) -p $(UB.products/)
+	$(CP.exe) ub.$(UB.first)/$(UB.products/)HandBrakeCLI $(UB.products/).
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)HandBrakeCLI) -create -output $(UB.products/)HandBrakeCLI
+	$(CP.exe) -R ub.$(UB.first)/$(UB.products/)HandBrake.app $(UB.products/).
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(1)) -create -output $(UB.products/)$(1)
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.frameworks/)HandBrakeKit.framework/Versions/A/HandBrakeKit) -create -output $(UB.products/)$(UB.frameworks/)HandBrakeKit.framework/Versions/A/HandBrakeKit
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.frameworks/)Sparkle.framework/Versions/A/Sparkle) -create -output $(UB.products/)$(UB.frameworks/)Sparkle.framework/Versions/A/Sparkle
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.frameworks/)Sparkle.framework/Versions/A/Resources/Autoupdate) -create -output $(UB.products/)$(UB.frameworks/)Sparkle.framework/Versions/A/Resources/Autoupdate
 
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)HandBrakeXPCService.xpc/Contents/MacOS/HandBrakeXPCService) -create -output ub.combine/HandBrake.app/Contents/XPCServices/HandBrakeXPCService.xpc/Contents/MacOS/HandBrakeXPCService
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)HandBrakeXPCService.xpc/Contents/MacOS/HandBrakeXPCService) -create -output $(UB.products/)HandBrake.app/Contents/XPCServices/HandBrakeXPCService.xpc/Contents/MacOS/HandBrakeXPCService
 
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)HandBrakeXPCService2.xpc/Contents/MacOS/HandBrakeXPCService2) -create -output ub.combine/$(UB.xpcServices/)HandBrakeXPCService2.xpc/Contents/MacOS/HandBrakeXPCService2
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)HandBrakeXPCService2.xpc/Contents/MacOS/HandBrakeXPCService2) -create -output $(UB.products/)$(UB.xpcServices/)HandBrakeXPCService2.xpc/Contents/MacOS/HandBrakeXPCService2
 
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)HandBrakeXPCService3.xpc/Contents/MacOS/HandBrakeXPCService3) -create -output ub.combine/$(UB.xpcServices/)HandBrakeXPCService3.xpc/Contents/MacOS/HandBrakeXPCService3
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)HandBrakeXPCService3.xpc/Contents/MacOS/HandBrakeXPCService3) -create -output $(UB.products/)$(UB.xpcServices/)HandBrakeXPCService3.xpc/Contents/MacOS/HandBrakeXPCService3
 
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)HandBrakeXPCService4.xpc/Contents/MacOS/HandBrakeXPCService4) -create -output ub.combine/$(UB.xpcServices/)HandBrakeXPCService4.xpc/Contents/MacOS/HandBrakeXPCService4
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)HandBrakeXPCService4.xpc/Contents/MacOS/HandBrakeXPCService4) -create -output $(UB.products/)$(UB.xpcServices/)HandBrakeXPCService4.xpc/Contents/MacOS/HandBrakeXPCService4
 
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.Downloader.xpc/Contents/MacOS/org.sparkle-project.Downloader) -create -output ub.combine/$(UB.xpcServices/)org.sparkle-project.Downloader.xpc/Contents/MacOS/org.sparkle-project.Downloader
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.Downloader.xpc/Contents/MacOS/org.sparkle-project.Downloader) -create -output $(UB.products/)$(UB.xpcServices/)org.sparkle-project.Downloader.xpc/Contents/MacOS/org.sparkle-project.Downloader
 
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerConnection.xpc/Contents/MacOS/org.sparkle-project.InstallerConnection) -create -output ub.combine/$(UB.xpcServices/)org.sparkle-project.InstallerConnection.xpc/Contents/MacOS/org.sparkle-project.InstallerConnection
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerConnection.xpc/Contents/MacOS/org.sparkle-project.InstallerConnection) -create -output $(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerConnection.xpc/Contents/MacOS/org.sparkle-project.InstallerConnection
 
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/org.sparkle-project.InstallerLauncher) -create -output ub.combine/$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/org.sparkle-project.InstallerLauncher
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/org.sparkle-project.InstallerLauncher) -create -output $(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/org.sparkle-project.InstallerLauncher
 
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/Autoupdate) -create -output ub.combine/$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/Autoupdate
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/Autoupdate) -create -output $(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/Autoupdate
 
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/Updater.app/Contents/MacOS/Updater) -create -output ub.combine/$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/Updater.app/Contents/MacOS/Updater
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/Updater.app/Contents/MacOS/Updater) -create -output $(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerLauncher.xpc/Contents/MacOS/Updater.app/Contents/MacOS/Updater
 
-	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerStatus.xpc/Contents/MacOS/org.sparkle-project.InstallerStatus) -create -output ub.combine/$(UB.xpcServices/)org.sparkle-project.InstallerStatus.xpc/Contents/MacOS/org.sparkle-project.InstallerStatus
+	$(LIPO.exe) $(foreach n,$(UB.xcconfigs),ub.$n/$(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerStatus.xpc/Contents/MacOS/org.sparkle-project.InstallerStatus) -create -output $(UB.products/)$(UB.xpcServices/)org.sparkle-project.InstallerStatus.xpc/Contents/MacOS/org.sparkle-project.InstallerStatus
 
-	@lipo -info ub.combine/$(1)
+	@lipo -info $(UB.products/)$(1)
 	@sync
 	@echo ""
-	@echo "$@: { $(UB.xcconfigs) } combined -> ub.combine/HandBrakeCLI"
-	@echo "$@: UB executable size: `du -sh ub.combine/HandBrakeCLI | awk '{ print $$1 }'`"
+	@echo "$@: { $(UB.xcconfigs) } combined -> $(UB.products/)HandBrakeCLI"
+	@echo "$@: UB executable size: `du -sh $(UB.products/)HandBrakeCLI | awk '{ print $$1 }'`"
 	@echo ""
-	@echo "$@: { $(UB.xcconfigs) } combined -> ub.combine/HandBrake.app"
-	@echo "$@: UB executable size: `du -sh ub.combine/$(1) | awk '{ print $$1 }'`"
+	@echo "$@: { $(UB.xcconfigs) } combined -> $(UB.products/)HandBrake.app"
+	@echo "$@: UB executable size: `du -sh $(UB.products/)$(1) | awk '{ print $$1 }'`"
+    @echo ""
 
-	## Probably there is a better way to get to hbsign
-	$(strip ../macosx/hbsign -sr '-' ub.combine/HandBrake.app ub.combine/HandBrakeCLI)
+	$(strip ../macosx/hbsign -sr '-' $(UB.products/)HandBrake.app $(UB.products/)HandBrakeCLI)
 endef
