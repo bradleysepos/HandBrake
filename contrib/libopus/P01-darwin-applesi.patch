@@ -1,0 +1,112 @@
+From 9edf3cba1847cfca868825d576d8b2b446606874 Mon Sep 17 00:00:00 2001
+From: Andrew Grant <andrew.grant@epicgames.com>
+Date: Mon, 6 Jul 2020 20:22:26 -0400
+Subject: [PATCH] Add support for cross-compiling on Mac
+
+Adds support for cross-compiling to different targets when building on Mac.
+
+E.g the following builds Opus for an arm64 Mac target (Apple silicon)
+
+./configure --host=aarch64-apple-macos make && make install
+---
+ Makefile.am  | 15 +++++++++++++++
+ README       | 17 +++++++++++++++++
+ configure.ac | 20 ++++++++++++++++++++
+ 3 files changed, 52 insertions(+)
+
+diff --git a/Makefile.am b/Makefile.am
+index e3847bf8..eb842ed0 100644
+--- a/Makefile.am
++++ b/Makefile.am
+@@ -9,6 +9,8 @@ lib_LTLIBRARIES = libopus.la
+ 
+ DIST_SUBDIRS = doc
+ 
++AM_LDFLAGS =
++AM_CFLAGS =
+ AM_CPPFLAGS = -I$(top_srcdir)/include -I$(top_srcdir)/celt -I$(top_srcdir)/silk \
+               -I$(top_srcdir)/silk/float -I$(top_srcdir)/silk/fixed $(NE10_CFLAGS)
+ 
+@@ -16,6 +18,19 @@ include celt_sources.mk
+ include silk_sources.mk
+ include opus_sources.mk
+ 
++# Pass x86_64 in compiler and linker flags if asked
++if CLANG_ARCH_X86_64
++AM_CFLAGS += -arch x86_64
++AM_LDFLAGS += -arch x86_64
++endif
++
++# Pass arm64 in compiler and linker flags if asked
++# (Note - may be additive to the above)
++if CLANG_ARCH_ARM64
++AM_CFLAGS += -arch arm64
++AM_LDFLAGS += -arch arm64
++endif
++
+ if FIXED_POINT
+ SILK_SOURCES += $(SILK_SOURCES_FIXED)
+ if HAVE_SSE4_1
+diff --git a/README b/README
+index 4b13076f..c492c239 100644
+--- a/README
++++ b/README
+@@ -66,6 +66,8 @@ On Apple macOS, install Xcode and brew.sh, then in the Terminal enter:
+ 
+     % brew install autoconf automake libtool
+ 
++    (See the Apple Cross-Compilation section for more info)
++
+ 1) Clone the repository:
+ 
+     % git clone https://gitlab.xiph.org/xiph/opus.git
+@@ -159,3 +161,18 @@ o The result of integer division of a negative value is truncated
+ 
+ o The compiler provides a 64-bit integer type (a C99 requirement
+   which is supported by most C89 compilers).
++
++== Apple Cross-Compilation ==
++
++When building for Apple platforms it's possible to cross-compile to a different architecture by using automake's --host argument. E.g. to compile Opus for Apple silicon -
++
++    % ./configure --host=aarch64-apple-macos 
++    % make
++
++Universal binaries can be created by compiling twice to different locations then using lipo to create a univeral library 
++
++    % ./configure --host=aarch64-apple-macos --prefix=$PWD/mac/arm64 && make && make install
++    % make clean
++    % ./configure --host=x86_64-apple-macos --prefix=$PWD/mac/x86_64 && make && make install
++    % lipo -create ./mac/x86_64/lib/libopus.a ./mac/arm64/lib/libopus.a -output ./mac/libopus.a
++    % lipo -info ./mac/libopus.a
+diff --git a/configure.ac b/configure.ac
+index 18ece291..301db971 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -116,6 +116,26 @@ AS_IF([test "$has_var_arrays" = "no"],
+ 
+ LT_LIB_M
+ 
++# If building for Apple we allow cross-compilation by passing x86_64 or arm64
++# to the compiler based on target type. 
++clang_arch_x86_64="no"
++clang_arch_arm64="no"
++
++AS_IF([test "$host_vendor" = "apple"],[ 
++    # If building for x86_64 ask for that
++    AS_IF([test "$host_cpu" = "x86_64"],[
++      clang_arch_x86_64="yes"  
++    ])
++    # If building for arm64, ask for that
++    AS_IF([test "$host_cpu" = "aarch64"],[
++      clang_arch_arm64="yes"      
++    ])
++])
++  
++# set the clang conditionals for our makefile
++AM_CONDITIONAL([CLANG_ARCH_X86_64], [test "$clang_arch_x86_64" = "yes"])
++AM_CONDITIONAL([CLANG_ARCH_ARM64], [test "$clang_arch_arm64" = "yes"])     
++
+ AC_ARG_ENABLE([fixed-point],
+     [AS_HELP_STRING([--enable-fixed-point],
+                     [compile without floating point (for machines without a fast enough FPU)])],,
