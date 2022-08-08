@@ -36,6 +36,7 @@ ifeq (1,$(HOST.cross))
         LIBVPL.CONFIGURE.extra += -DCMAKE_CXX_FLAGS="-static-libgcc -static-libstdc++ -static"
         LIBVPL.CONFIGURE.extra += -DCMAKE_SHARED_LIBRARY_LINK_CXX_FLAGS="-static-libgcc -static-libstdc++ -static"
         LIBVPL.CONFIGURE.extra += -DCMAKE_RC_COMPILER=$(HOST.cross.prefix)windres
+        LIBVPL.CONFIGURE.args.host = -DCMAKE_HOST_SYSTEM="$(LIBVPL.CONFIGURE.host)"
     else ifeq ($(HOST.system),darwin)
         LIBVPL.CONFIGURE.args.host  = -DCMAKE_HOST_SYSTEM="$(LIBVPL.CONFIGURE.host)"
     else
