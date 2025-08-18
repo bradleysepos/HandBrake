@@ -11,7 +11,7 @@ jobs:
     name: CLI / LibHB
     runs-on: ubuntu-22.04
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Cargo-C Toolchain Cache
       id: windows-cargo-c-toolchain
@@ -81,7 +81,7 @@ jobs:
       SigningCertificate: ${{ secrets.HandBrakeTeam_SignFile }}
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Download LibHandBrake
       uses: actions/download-artifact@v4
