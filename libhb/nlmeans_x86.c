@@ -13,11 +13,13 @@
 #if defined(ARCH_X86)
 
 #include <emmintrin.h>
+#include <smmintrin.h>
 
 #include "libavutil/cpu.h"
 #include "handbrake/nlmeans.h"
 
-static void build_integral_sse2(void *integral,
+ATTR_TARGET_SSE2
+static void build_integral_8_sse2(void *integral,
                                 int       integral_stride,
                           const void  *in_src,
                           const void  *in_src_pre,
@@ -148,12 +150,152 @@ static void build_integral_sse2(void *integral,
     }
 }
 
-void nlmeans_init_x86(NLMeansFunctions *functions)
+ATTR_TARGET_SSE4
+static void build_integral_16_sse4(void *integral,
+                                int       integral_stride,
+                          const void  *in_src,
+                          const void  *in_src_pre,
+                          const void  *in_compare,
+                          const void  *in_compare_pre,
+                                int       w,
+                                int       border,
+                                int       dst_w,
+                                int       dst_h,
+                                int       dx,
+                                int       dy,
+                                int       n)
 {
-    if (av_get_cpu_flags() & AV_CPU_FLAG_SSE2)
+    const __m128i zero = _mm_set1_epi16(0);
+    const int bw = w + 2 * border;
+    const int n_half = (n-1) /2;
+
+    const uint16_t *src_pre      = (const uint16_t *)in_src_pre;
+    const uint16_t *compare_pre  = (const uint16_t *)in_compare_pre;
+
+    for (int y = 0; y < dst_h + n; y++)
     {
-        functions->build_integral = build_integral_sse2;
-        hb_log("NLMeans using SSE2 optimizations");
+        __m128i prevadd = _mm_set1_epi32(0);
+
+        const uint16_t *p1 = src_pre     + (y-n_half   )*bw - n_half;
+        const uint16_t *p2 = compare_pre + (y-n_half+dy)*bw - n_half + dx;
+        uint64_t *out = (uint64_t *)(integral) + (y*integral_stride);
+
+        for (int x = 0; x < dst_w + n; x += 8)
+        {
+            __m128i pa, pb;
+            __m128i pla, plb;
+            __m128i ldiff, lldiff, lhdiff;
+            __m128i ltmp,htmp;
+            __m128i ladd,hadd;
+            __m128i pha,phb;
+            __m128i hdiff,hldiff,hhdiff;
+            __m128i l2tmp,h2tmp;
+
+            pa = _mm_loadu_si128((__m128i*)p1);      // Load source  pixels into register 1
+            pb = _mm_loadu_si128((__m128i*)p2);      // Load compare pixels into register 2
+
+            // Low
+            pla = _mm_unpacklo_epi16(pa,zero);       // Unpack and interleave source  low with zeros
+            plb = _mm_unpacklo_epi16(pb,zero);       // Unpack and interleave compare low with zeros
+
+            ldiff = _mm_sub_epi32(pla,plb);          // Diff source and compare lows (subtract)
+            ldiff = _mm_mullo_epi32(ldiff,ldiff);    // Square low diff (multiply at 64-bit precision)
+
+            lldiff = _mm_unpacklo_epi32(ldiff,zero); // Unpack and interleave diff low  with zeros
+            lhdiff = _mm_unpackhi_epi32(ldiff,zero); // Unpack and interleave diff high with zeros
+
+            ltmp = _mm_slli_si128(lldiff, 8);        // Temp shift diff low left 8 bytes
+            lldiff = _mm_add_epi64(lldiff, ltmp);    // Add above to diff low
+            lldiff = _mm_add_epi64(lldiff, prevadd); // Add previous total to diff low
+
+            ladd = _mm_shuffle_epi32(lldiff, 0xEE);  // Shuffle diff low
+
+            htmp = _mm_slli_si128(lhdiff, 8);        // Temp shift diff high left 8 bytes
+            lhdiff = _mm_add_epi64(lhdiff, htmp);    // Add above to diff high
+            lhdiff = _mm_add_epi64(lhdiff, ladd);    // Add shuffled diff low to diff high
+
+            prevadd = _mm_shuffle_epi32(lhdiff, 0xEE); // Shuffle diff high
+
+            // High
+            pha = _mm_unpackhi_epi16(pa,zero);       // Unpack and interleave source  high with zeros
+            phb = _mm_unpackhi_epi16(pb,zero);       // Unpack and interleave compare high with zeros
+
+            hdiff = _mm_sub_epi32(pha,phb);          // Diff source and compare highs (subtract)
+            hdiff = _mm_mullo_epi32(hdiff,hdiff);    // Square high diff (multiply at 64-bit precision)
+
+            hldiff = _mm_unpacklo_epi32(hdiff,zero); // Unpack and interleave diff low  with zeros
+            hhdiff = _mm_unpackhi_epi32(hdiff,zero); // Unpack and interleave diff high with zeros
+
+            l2tmp = _mm_slli_si128(hldiff, 8);       // Temp shift diff low left 8 bytes
+            hldiff = _mm_add_epi64(hldiff, l2tmp);   // Add above to diff low
+            hldiff = _mm_add_epi64(hldiff, prevadd); // Add previous total to diff low
+
+            hadd = _mm_shuffle_epi32(hldiff, 0xEE);  // Shuffle diff low
+
+            h2tmp = _mm_slli_si128(hhdiff, 8);       // Temp shift diff high left 8 bytes
+            hhdiff = _mm_add_epi64(hhdiff, h2tmp);   // Add above to diff high
+            hhdiff = _mm_add_epi64(hhdiff, hadd);    // Add shuffled diff low to diff high
+
+            prevadd = _mm_shuffle_epi32(hhdiff, 0xEE); // Shuffle diff high
+
+            // Store
+            _mm_store_si128((__m128i*)(out),    lldiff); // Store low  diff low  in memory
+            _mm_store_si128((__m128i*)(out+2),  lhdiff); // Store low  diff high in memory
+            _mm_store_si128((__m128i*)(out+4),  hldiff); // Store high diff low  in memory
+            _mm_store_si128((__m128i*)(out+6), hhdiff);  // Store high diff high in memory
+
+            // Increment
+            out += 8;
+            p1  += 8;
+            p2  += 8;
+        }
+
+        if (y > 0)
+        {
+            out = (uint64_t *)(integral) + y*integral_stride;
+
+            for (int x = 0; x < dst_w + n; x += 8)
+            {
+                *((__m128i*)out) = _mm_add_epi64(*(__m128i*)(out-integral_stride),
+                                                 *(__m128i*)(out));
+
+                *((__m128i*)(out+2)) = _mm_add_epi64(*(__m128i*)(out+2-integral_stride),
+                                                     *(__m128i*)(out+2));
+
+                *((__m128i*)(out+4)) = _mm_add_epi64(*(__m128i*)(out+4-integral_stride),
+                                                     *(__m128i*)(out+4));
+
+                *((__m128i*)(out+6)) = _mm_add_epi64(*(__m128i*)(out+6-integral_stride),
+                                                     *(__m128i*)(out+6));
+
+                out += 8;
+            }
+        }
+    }
+}
+
+void nlmeans_init_x86(NLMeansFunctions *functions,
+                             const int  depth)
+{
+    switch (depth)
+    {
+        case 8:
+            if (av_get_cpu_flags() & AV_CPU_FLAG_SSE2)
+            {
+                functions->build_integral = build_integral_8_sse2;
+                hb_log("NLMeans using SSE2 optimizations (depth %d)", depth);
+            }
+            break;
+        case 10:
+        case 12:
+        case 16:
+        default:
+            if (av_get_cpu_flags() & AV_CPU_FLAG_SSE4)
+            {
+                functions->build_integral = build_integral_16_sse4;
+                hb_log("NLMeans using SSE4.1 optimizations (depth %d)", depth);
+            }
+            break;
     }
 }
 
