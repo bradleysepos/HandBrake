@@ -54,6 +54,7 @@
 #include "handbrake/hbffmpeg.h"
 #include "handbrake/taskset.h"
 #include "handbrake/nlmeans.h"
+#include "handbrake/plane_utils.h"
 
 #define NLMEANS_STRENGTH_LUMA_DEFAULT      6
 #define NLMEANS_STRENGTH_CHROMA_DEFAULT    6
@@ -151,8 +152,6 @@ struct hb_filter_private_s
                           BorderedPlane *dst,
                           const int border);
     void (*nlmeans_prefilter)(BorderedPlane *src, const int filter_type);
-    void (*nlmeans_deborder)(const BorderedPlane *src, void *in_dst,
-                                const int w, const int s, const int h);
     void (*nlmeans_plane)(NLMeansFunctions *functions,
                                     Frame *frame,
                                     int slot,
@@ -249,7 +248,6 @@ static int nlmeans_init(hb_filter_object_t *filter,
             functions->build_integral = build_integral_scalar_8;
             pv->nlmeans_alloc         = nlmeans_alloc_8;
             pv->nlmeans_prefilter     = nlmeans_prefilter_8;
-            pv->nlmeans_deborder      = nlmeans_deborder_8;
             pv->nlmeans_plane         = nlmeans_plane_8;
         #if defined(ARCH_X86)
             nlmeans_init_x86(functions, 8);
@@ -262,7 +260,6 @@ static int nlmeans_init(hb_filter_object_t *filter,
             functions->build_integral = build_integral_scalar_16;
             pv->nlmeans_alloc         = nlmeans_alloc_16;
             pv->nlmeans_prefilter     = nlmeans_prefilter_16;
-            pv->nlmeans_deborder      = nlmeans_deborder_16;
             pv->nlmeans_plane         = nlmeans_plane_16;
         #if defined(ARCH_X86)
             nlmeans_init_x86(functions, 16);
@@ -273,7 +270,6 @@ static int nlmeans_init(hb_filter_object_t *filter,
             functions->build_integral = build_integral_scalar_16;
             pv->nlmeans_alloc         = nlmeans_alloc_16;
             pv->nlmeans_prefilter     = nlmeans_prefilter_16;
-            pv->nlmeans_deborder      = nlmeans_deborder_16;
             pv->nlmeans_plane         = nlmeans_plane_16;
             break;
     }
@@ -510,16 +506,20 @@ static void nlmeans_filter_work(void *thread_args_v)
         if (pv->prefilter[c] & NLMEANS_PREFILTER_MODE_PASSTHRU)
         {
             pv->nlmeans_prefilter(&frame->plane[c], pv->prefilter[c]);
-            pv->nlmeans_deborder(&frame->plane[c], buf->plane[c].data,
-                                 buf->plane[c].width, buf->plane[c].stride / pv->bps,
-                                 buf->plane[c].height);
+            hb_plane_deborder(frame->plane[c].image, frame->plane[c].w,
+                              frame->plane[c].border,
+                              buf->plane[c].data,
+                              buf->plane[c].width, buf->plane[c].stride / pv->bps,
+                              buf->plane[c].height, pv->bps);
             continue;
         }
         if (pv->strength[c] == 0)
         {
-            pv->nlmeans_deborder(&frame->plane[c], buf->plane[c].data,
-                                 buf->plane[c].width, buf->plane[c].stride / pv->bps,
-                                 buf->plane[c].height);
+            hb_plane_deborder(frame->plane[c].image, frame->plane[c].w,
+                              frame->plane[c].border,
+                              buf->plane[c].data,
+                              buf->plane[c].width, buf->plane[c].stride / pv->bps,
+                              buf->plane[c].height, pv->bps);
             continue;
         }
 
@@ -621,16 +621,20 @@ static hb_buffer_t * nlmeans_filter_flush(hb_filter_private_t *pv)
             if (pv->prefilter[c] & NLMEANS_PREFILTER_MODE_PASSTHRU)
             {
                 pv->nlmeans_prefilter(&frame->plane[c], pv->prefilter[c]);
-                pv->nlmeans_deborder(&frame->plane[c], buf->plane[c].data,
-                                       buf->plane[c].width, buf->plane[c].stride / pv->bps,
-                                       buf->plane[c].height);
+                hb_plane_deborder(frame->plane[c].image, frame->plane[c].w,
+                                  frame->plane[c].border,
+                                  buf->plane[c].data,
+                                  buf->plane[c].width, buf->plane[c].stride / pv->bps,
+                                  buf->plane[c].height, pv->bps);
                 continue;
             }
             if (pv->strength[c] == 0)
             {
-                pv->nlmeans_deborder(&frame->plane[c], buf->plane[c].data,
-                                     buf->plane[c].width, buf->plane[c].stride / pv->bps,
-                                     buf->plane[c].height);
+                hb_plane_deborder(frame->plane[c].image, frame->plane[c].w,
+                                  frame->plane[c].border,
+                                  buf->plane[c].data,
+                                  buf->plane[c].width, buf->plane[c].stride / pv->bps,
+                                  buf->plane[c].height, pv->bps);
                 continue;
             }
 
