@@ -39,55 +39,6 @@
 #   define FUNC(name) name##_##8
 #endif
 
-static void FUNC(nlmeans_border)(pixel *src,
-                                 const int w,
-                                 const int h,
-                                 const int border)
-{
-    const int bw = w + 2 * border;
-    pixel *image = src + border + bw * border;
-
-    // Create faux borders using edge pixels
-    for (int y = 0; y < h; y++)
-    {
-        for (int x = 0; x < border; x++)
-        {
-            *(image + y*bw - x - 1) = *(image + y*bw + x);
-            *(image + y*bw + x + w) = *(image + y*bw - x + (w-1));
-        }
-    }
-    for (int y = 0; y < border; y++)
-    {
-        memcpy(image - border - (y+1)*bw, image - border +       y*bw, bw * sizeof(pixel));
-        memcpy(image - border + (y+h)*bw, image - border + (h-y-1)*bw, bw * sizeof(pixel));
-    }
-
-}
-
-static void FUNC(nlmeans_deborder)(const BorderedPlane *src,
-                                   void *in_dst,
-                                   const int w,
-                                   const int s,
-                                   const int h)
-{
-    pixel *dst = in_dst;
-    const int bw = src->w + 2 * src->border;
-    pixel *image = ((pixel *)src->mem) + src->border + bw * src->border;
-
-    int width = w;
-    if (src->w < width)
-    {
-        width = src->w;
-    }
-
-    // Copy main image
-    for (int y = 0; y < h; y++)
-    {
-        memcpy(dst + y * s, image + y * bw, width * sizeof(pixel));
-    }
-
-}
-
 static void FUNC(nlmeans_alloc)(const void *in_src,
                                 const int src_w,
                                 const int src_s,
@@ -128,7 +79,7 @@ static void FUNC(nlmeans_alloc)(const void *in_src,
     dst->h         = src_h;
     dst->border    = border;
 
-    FUNC(nlmeans_border)(dst->mem, dst->w, dst->h, dst->border);
+    hb_plane_border(image, dst->w, dst->h, dst->border, sizeof(pixel));
     if (dst->mem_pre == NULL)
     {
         // Actual prefilter will allocate a separate buffer and replace this alias
@@ -365,109 +316,6 @@ static void FUNC(nlmeans_filter_csm)(const pixel *src,
     }
 }
 
-static void FUNC(nlmeans_filter_edgeboost)(const pixel *src,
-                                                 pixel *dst,
-                                           const int w,
-                                           const int h,
-                                           const int border)
-{
-    const int bw = w + 2 * border;
-    const int bh = h + 2 * border;
-
-    // Custom kernel
-    const int kernel_size = 3;
-    const int kernel[3][3] = {{-31, 0, 31},
-                              {-44, 0, 44},
-                              {-31, 0, 31}};
-    const double kernel_coef = 1.0 / 126.42;
-
-    // Detect edges
-    const int offset_min = -((kernel_size - 1) /2);
-    const int offset_max =   (kernel_size + 1) /2;
-    pixel_2 pixel1;
-    pixel_2 pixel2;
-    pixel *mask_mem = calloc(bw * bh, sizeof(pixel));
-    pixel *mask = mask_mem + border + bw * border;
-    for (int y = 0; y < h; y++)
-    {
-        for (int x = 0; x < w; x++)
-        {
-            pixel1 = 0;
-            pixel2 = 0;
-            for (int k = offset_min; k < offset_max; k++)
-            {
-                for (int j = offset_min; j < offset_max; j++)
-                {
-                    pixel1 += kernel[j+1][k+1] * *(src + bw*(y+j) + (x+k));
-                    pixel2 += kernel[k+1][j+1] * *(src + bw*(y+j) + (x+k));
-                }
-            }
-            pixel1 = pixel1 > 0 ? pixel1 : -pixel1;
-            pixel2 = pixel2 > 0 ? pixel2 : -pixel2;
-            pixel1 = (pixel_2)(((double)pixel1 * kernel_coef) + 128);
-            pixel2 = (pixel_2)(((double)pixel2 * kernel_coef) + 128);
-            *(mask + bw*y + x) = (pixel)(pixel1 + pixel2);
-            if (*(mask + bw*y + x) > 160)
-            {
-                *(mask + bw*y + x) = 235;
-            }
-            else if (*(mask + bw*y + x) > 16)
-            {
-                *(mask + bw*y + x) = 128;
-            }
-            else
-            {
-                *(mask + bw*y + x) = 16;
-            }
-        }
-    }
-
-    // Post-process and output
-    int pixels;
-    for (int y = 0; y < h; y++)
-    {
-        for (int x = 0; x < w; x++)
-        {
-            if (*(mask + bw*y + x) > 16)
-            {
-                // Count nearby edge pixels
-                pixels = 0;
-                for (int k = offset_min; k < offset_max; k++)
-                {
-                    for (int j = offset_min; j < offset_max; j++)
-                    {
-                        if (*(mask + bw*(y+j) + (x+k)) > 16)
-                        {
-                            pixels++;
-                        }
-                    }
-                }
-                // Remove false positive
-                if (pixels < 3)
-                {
-                    *(mask + bw*y + x) = 16;
-                }
-                // Filter output
-                if (*(mask + bw*y + x) > 16)
-                {
-                    if (*(mask + bw*y + x) == 235)
-                    {
-                        *(dst + bw*y + x) = (3 * *(src + bw*y + x) + 1 * *(dst + bw*y + x)) /4;
-                    }
-                    else
-                    {
-                        *(dst + bw*y + x) = (2 * *(src + bw*y + x) + 3 * *(dst + bw*y + x)) /5;
-                    }
-                    //*(dst + bw*y + x) = *(mask + bw*y + x); // Overlay mask
-                }
-            }
-            //*(dst + bw*y + x) = *(mask + bw*y + x); // Full mask
-        }
-    }
-
-    free(mask_mem);
-}
-
 static void FUNC(nlmeans_prefilter)(BorderedPlane *src,
                                     const int filter_type)
 {
@@ -539,46 +387,29 @@ static void FUNC(nlmeans_prefilter)(BorderedPlane *src,
         // Restore edges
         if (filter_type & NLMEANS_PREFILTER_MODE_EDGEBOOST)
         {
-            FUNC(nlmeans_filter_edgeboost)(image, image_pre, w, h, border);
+            hb_plane_edgeboost(image, image_pre, w, h, border, sizeof(pixel));
         }
 
         // Blend source and destination main image pixels for lesser effect
         // Border pixels are skipped here and recreated afterward
-        int wet = 1;
-        int dry = 0;
+        double mix = 1.0;
         if (filter_type & NLMEANS_PREFILTER_MODE_REDUCE50 &&
             filter_type & NLMEANS_PREFILTER_MODE_REDUCE25)
         {
-            wet = 1;
-            dry = 3;
+            mix = 0.25;
         }
         else if (filter_type & NLMEANS_PREFILTER_MODE_REDUCE50)
         {
-            wet = 1;
-            dry = 1;
+            mix = 0.5;
         }
         else if (filter_type & NLMEANS_PREFILTER_MODE_REDUCE25)
         {
-            wet = 3;
-            dry = 1;
+            mix = 0.75;
         }
-        if (dry > 0)
-        {
-            const pixel *s;
-            pixel *d;
-            for (int y = 0; y < h; y++)
-            {
-                s = image     + y * bw;
-                d = image_pre + y * bw;
-                for (int x = 0; x < w; x++)
-                {
-                    d[x] = (pixel)((wet * d[x] + dry * s[x]) / (wet + dry));
-                }
-            }
-        }
+        hb_plane_blend(image, image_pre, w, h, border, sizeof(pixel), mix, 0);
 
         // Recreate borders
-        FUNC(nlmeans_border)(mem_pre, w, h, border);
+        hb_plane_border(image_pre, w, h, border, sizeof(pixel));
 
         // Assign result
         if (filter_type & NLMEANS_PREFILTER_MODE_PASSTHRU)
